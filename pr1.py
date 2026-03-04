@@ -1,4 +1,3 @@
-import datetime
 import csv
 import time
 from itertools import combinations
@@ -6,11 +5,7 @@ from collections import defaultdict
 
 from github import Github, Auth
 
-# ==============================
-# CONFIGURACIÓN
-# ==============================
-
-GITHUB_TOKEN = "Tu token aqui"
+GITHUB_TOKEN = "Tu token de GitHub"
 
 SEED_REPOSITORIES = [
     "tensorflow/tensorflow",
@@ -22,39 +17,28 @@ MAX_REPOS_PER_USER = 3
 MAX_USERS_TO_EXPAND = 20
 MAX_TOTAL_REPOS = 150
 
-# ==============================
-# INICIALIZAR API
-# ==============================
-
 auth = Auth.Token(GITHUB_TOKEN)
 g = Github(auth=auth)
 
+
 def check_rate_limit():
-    # Devuelve (remaining, limit)
+
     remaining, limit = g.rate_limiting
 
-    # reset time es epoch (segundos desde 1970)
     reset_ts = getattr(g, "rate_limiting_resettime", None)
 
     if remaining < 10 and reset_ts:
         now_ts = int(time.time())
-        sleep_time = max(reset_ts - now_ts, 0) + 5  # +5s margen
+        sleep_time = max(reset_ts - now_ts, 0) + 5
         print(f"Rate limit casi agotado ({remaining}/{limit}). Esperando {sleep_time}s...")
         time.sleep(sleep_time)
-# ==============================
-# ESTRUCTURAS
-# ==============================
 
 nodes = {}
 edges = defaultdict(int)
-processed_repos = set()  # NUEVO: para no repetir repos
+processed_repos = set()
 
-# ==============================
-# FUNCIONES
-# ==============================
 
 def process_repository(repo_full_name):
-    # NUEVO: no repetir y cortar por total
     if repo_full_name in processed_repos:
         return
     if len(processed_repos) >= MAX_TOTAL_REPOS:
@@ -78,7 +62,6 @@ def process_repository(repo_full_name):
         contributor_logins.append(contributor.login)
 
         if contributor.login not in nodes:
-            # followers puede ralentizar; lo dejamos, pero si va lento pon 0
             check_rate_limit()
             nodes[contributor.login] = {
                 "Id": contributor.login,
@@ -92,7 +75,6 @@ def process_repository(repo_full_name):
 
 
 def expand_from_user(user_login):
-    # si ya alcanzaste el tope de repos, no expandas más
     if len(processed_repos) >= MAX_TOTAL_REPOS:
         return
 
@@ -116,17 +98,11 @@ def expand_from_user(user_login):
             print(f"Error en repo {repo.full_name}: {e}")
             continue
 
-
-# ==============================
-# EJECUCIÓN PRINCIPAL
-# ==============================
-
 def main():
-    # Paso 1: procesar repos semilla
+
     for repo in SEED_REPOSITORIES:
         process_repository(repo)
 
-    # Paso 2: expansión (NUEVO: limitar usuarios)
     usuarios_iniciales = list(nodes.keys())[:MAX_USERS_TO_EXPAND]
 
     for user in usuarios_iniciales:
@@ -138,14 +114,12 @@ def main():
             print(f"Error expandiendo usuario {user}: {e}")
             continue
 
-    # GUARDAR CSV NODOS
     with open("nodes.csv", "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=["Id", "Label", "Followers"])
         writer.writeheader()
         for node in nodes.values():
             writer.writerow(node)
 
-    # GUARDAR CSV ARISTAS
     with open("edges.csv", "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=["Source", "Target", "Weight"])
         writer.writeheader()
